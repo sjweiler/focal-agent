@@ -1,0 +1,23 @@
+## Visual Studio / .NET
+.vs/
+bin/
+obj/
+
+## User-specific project files
+*.user
+*.rsuser
+*.suo
+*.userosscache
+*.sln.docstates
+
+## Build output
+Debug/
+Release/
+x64/
+x86/
+
+## OS files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
