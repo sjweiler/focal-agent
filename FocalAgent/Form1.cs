@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using FocalAgent.Plugins;
 using NAudio.Wave;
 using Vosk;
 
@@ -14,11 +15,17 @@ namespace FocalAgent
         private const string PermissionPrefix = "PERMISSION_REQUEST:";
         private const string VoskModelDirectoryName = "vosk-model-small-en-us-0.15";
         private const int SpeechSampleRate = 16000;
+        private static readonly JsonSerializerOptions PrettyJsonOptions = new()
+        {
+            WriteIndented = true
+        };
         private static readonly HttpClient OllamaClient = new()
         {
             BaseAddress = new Uri("http://localhost:11434"),
             Timeout = TimeSpan.FromMinutes(5)
         };
+        private readonly PluginManager pluginManager = new();
+        private readonly PluginProcessClient pluginClient = new();
         private readonly object speechLock = new();
         private Model? speechModel;
         private VoskRecognizer? speechRecognizer;
@@ -93,7 +100,102 @@ namespace FocalAgent
 
         private void PluginButton_Click(object sender, EventArgs e)
         {
-            MessageBox.Show(this, "Plugin controls will open here.", "Plugins", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            try
+            {
+                var plugins = pluginManager.LoadPlugins();
+
+                if (plugins.Count == 0)
+                {
+                    MessageBox.Show(this, $"No plugins found in:{Environment.NewLine}{pluginManager.PluginsDirectory}", "Plugins", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+
+                ShowPluginMenu(plugins);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, ex.Message, "Plugins", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        }
+
+        private void ShowPluginMenu(IReadOnlyList<InstalledPlugin> plugins)
+        {
+            var menu = new ContextMenuStrip();
+
+            foreach (var plugin in plugins)
+            {
+                var pluginItem = new ToolStripMenuItem($"{plugin.Manifest.Name} {plugin.Manifest.Version}".Trim());
+
+                foreach (var command in plugin.Manifest.Commands)
+                {
+                    var commandItem = new ToolStripMenuItem(command.Method)
+                    {
+                        ToolTipText = command.Description,
+                        Tag = (plugin, command)
+                    };
+                    commandItem.Click += PluginCommand_Click;
+                    pluginItem.DropDownItems.Add(commandItem);
+                }
+
+                menu.Items.Add(pluginItem);
+            }
+
+            menu.Show(pluginButton, new Point(0, pluginButton.Height));
+        }
+
+        private async void PluginCommand_Click(object? sender, EventArgs e)
+        {
+            if (sender is not ToolStripMenuItem { Tag: ValueTuple<InstalledPlugin, PluginCommandManifest> tag })
+            {
+                return;
+            }
+
+            await RunPluginCommandAsync(tag.Item1, tag.Item2);
+        }
+
+        private async Task RunPluginCommandAsync(InstalledPlugin plugin, PluginCommandManifest command)
+        {
+            if (command.RequiresPermission)
+            {
+                var decision = MessageBox.Show(
+                    this,
+                    $"{plugin.Manifest.Name} wants to run {command.Method}.{Environment.NewLine}{command.Description}",
+                    "Run plugin command?",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Question);
+
+                if (decision != DialogResult.Yes)
+                {
+                    return;
+                }
+            }
+
+            userQueryText.Text = $"plugin: {plugin.Manifest.Id}/{command.Method}";
+            responseText.Text = "plugin: Running...";
+            thinkingIndicator.Text = "Running plugin...";
+            pluginButton.Enabled = false;
+
+            try
+            {
+                var result = await pluginClient.InvokeAsync(plugin, command.Method);
+                responseText.Text = $"plugin: {plugin.Manifest.Name}/{command.Method}{Environment.NewLine}{FormatPluginData(result.Data)}";
+            }
+            catch (Exception ex)
+            {
+                responseText.Text = $"plugin error: {ex.Message}";
+            }
+            finally
+            {
+                pluginButton.Enabled = true;
+                thinkingIndicator.Text = "Ready";
+            }
+        }
+
+        private static string FormatPluginData(JsonElement? data)
+        {
+            return data is null
+                ? "(no data)"
+                : JsonSerializer.Serialize(data.Value, PrettyJsonOptions);
         }
 
         private void VoiceButton_Click(object sender, EventArgs e)

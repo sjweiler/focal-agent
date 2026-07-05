@@ -1,0 +1,34 @@
+{
+  "id": "focal-agent.inventory",
+  "name": "Inventory",
+  "version": "0.1.0",
+  "description": "Read-only Windows system inventory from focal-agent-inventory-plugin.",
+  "executable": "focal-agent-inventory-plugin.exe",
+  "commands": [
+    {
+      "method": "inventory.collect",
+      "description": "Collect host, OS, CPU, and memory inventory.",
+      "requiresPermission": true
+    },
+    {
+      "method": "disks.list",
+      "description": "List local disks and usage.",
+      "requiresPermission": true
+    },
+    {
+      "method": "network.list",
+      "description": "List network adapters and addresses.",
+      "requiresPermission": true
+    },
+    {
+      "method": "processes.list",
+      "description": "List running processes.",
+      "requiresPermission": true
+    },
+    {
+      "method": "services.list",
+      "description": "List Windows services.",
+      "requiresPermission": true
+    }
+  ]
+}
