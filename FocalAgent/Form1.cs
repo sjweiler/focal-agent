@@ -1,6 +1,9 @@
 using System.Diagnostics;
 using System.Net.Http.Json;
+using System.Text.Json;
 using System.Text.Json.Serialization;
+using NAudio.Wave;
+using Vosk;
 
 namespace FocalAgent
 {
@@ -9,16 +12,27 @@ namespace FocalAgent
         private const string LocalModelLabel = "Local model";
         private const string OllamaModel = "llama3";
         private const string PermissionPrefix = "PERMISSION_REQUEST:";
+        private const string VoskModelDirectoryName = "vosk-model-small-en-us-0.15";
+        private const int SpeechSampleRate = 16000;
         private static readonly HttpClient OllamaClient = new()
         {
             BaseAddress = new Uri("http://localhost:11434"),
             Timeout = TimeSpan.FromMinutes(5)
         };
+        private readonly object speechLock = new();
+        private Model? speechModel;
+        private VoskRecognizer? speechRecognizer;
+        private WaveInEvent? microphone;
+        private bool isListening;
 
         public Form1()
         {
             InitializeComponent();
             modelSelector.SelectedIndex = 0;
+            toolStripMenuItem1.Click += ShowFocalAgent_Click;
+            toolStripMenuItem2.Click += StartListening_Click;
+            stopListeningToolStripMenuItem.Click += StopListening_Click;
+            exitToolStripMenuItem.Click += Exit_Click;
         }
 
         private async void SendButton_Click(object sender, EventArgs e)
@@ -80,6 +94,213 @@ namespace FocalAgent
         private void PluginButton_Click(object sender, EventArgs e)
         {
             MessageBox.Show(this, "Plugin controls will open here.", "Plugins", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        private void VoiceButton_Click(object sender, EventArgs e)
+        {
+            if (isListening)
+            {
+                StopListening();
+                return;
+            }
+
+            StartListening();
+        }
+
+        private void ShowFocalAgent_Click(object? sender, EventArgs e)
+        {
+            Show();
+            WindowState = FormWindowState.Normal;
+            Activate();
+        }
+
+        private void StartListening_Click(object? sender, EventArgs e)
+        {
+            StartListening();
+        }
+
+        private void StopListening_Click(object? sender, EventArgs e)
+        {
+            StopListening();
+        }
+
+        private void Exit_Click(object? sender, EventArgs e)
+        {
+            Close();
+        }
+
+        private void StartListening()
+        {
+            if (isListening)
+            {
+                return;
+            }
+
+            try
+            {
+                Vosk.Vosk.SetLogLevel(-1);
+                var model = GetOrCreateSpeechModel();
+                speechRecognizer = new VoskRecognizer(model, SpeechSampleRate);
+                speechRecognizer.SetWords(true);
+
+                microphone = new WaveInEvent
+                {
+                    WaveFormat = new WaveFormat(SpeechSampleRate, 1),
+                    BufferMilliseconds = 50
+                };
+                microphone.DataAvailable += Microphone_DataAvailable;
+                microphone.RecordingStopped += Microphone_RecordingStopped;
+                microphone.StartRecording();
+
+                isListening = true;
+                voiceButton.Text = "Stop";
+                toolStripMenuItem2.Enabled = false;
+                stopListeningToolStripMenuItem.Enabled = true;
+                thinkingIndicator.Text = "Listening...";
+            }
+            catch (Exception ex)
+            {
+                StopListening();
+                MessageBox.Show(this, $"Could not start voice recognition:{Environment.NewLine}{ex.Message}", "Voice recognition", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+        }
+
+        private void StopListening()
+        {
+            if (!isListening && microphone is null && speechRecognizer is null)
+            {
+                return;
+            }
+
+            isListening = false;
+            microphone?.StopRecording();
+            DisposeMicrophone();
+            DisposeRecognizer();
+            voiceButton.Text = "Voice";
+            toolStripMenuItem2.Enabled = true;
+            stopListeningToolStripMenuItem.Enabled = false;
+            thinkingIndicator.Text = "Ready";
+        }
+
+        private void Microphone_DataAvailable(object? sender, WaveInEventArgs e)
+        {
+            lock (speechLock)
+            {
+                if (speechRecognizer is null)
+                {
+                    return;
+                }
+
+                if (speechRecognizer.AcceptWaveform(e.Buffer, e.BytesRecorded))
+                {
+                    AppendRecognizedText(GetRecognizedText(speechRecognizer.Result()));
+                }
+            }
+        }
+
+        private void Microphone_RecordingStopped(object? sender, StoppedEventArgs e)
+        {
+            if (e.Exception is not null && !IsDisposed)
+            {
+                BeginInvoke(() =>
+                {
+                    StopListening();
+                    MessageBox.Show(this, e.Exception.Message, "Microphone stopped", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                });
+            }
+        }
+
+        private void AppendRecognizedText(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text) || IsDisposed)
+            {
+                return;
+            }
+
+            BeginInvoke(() =>
+            {
+                promptTextBox.Text = string.IsNullOrWhiteSpace(promptTextBox.Text)
+                    ? text
+                    : $"{promptTextBox.Text.TrimEnd()} {text}";
+                promptTextBox.SelectionStart = promptTextBox.TextLength;
+                promptTextBox.Focus();
+            });
+        }
+
+        private static string GetRecognizedText(string resultJson)
+        {
+            using var document = JsonDocument.Parse(resultJson);
+            return document.RootElement.TryGetProperty("text", out var textElement)
+                ? textElement.GetString() ?? string.Empty
+                : string.Empty;
+        }
+
+        private Model GetOrCreateSpeechModel()
+        {
+            if (speechModel is not null)
+            {
+                return speechModel;
+            }
+
+            var modelPath = GetVoskModelPath();
+            speechModel = new Model(modelPath);
+            return speechModel;
+        }
+
+        private static string GetVoskModelPath()
+        {
+            var modelPath = Path.Combine(AppContext.BaseDirectory, "models", VoskModelDirectoryName);
+            var nestedModelPath = Path.Combine(modelPath, VoskModelDirectoryName);
+
+            if (IsVoskModelDirectory(modelPath))
+            {
+                return modelPath;
+            }
+
+            if (IsVoskModelDirectory(nestedModelPath))
+            {
+                return nestedModelPath;
+            }
+
+            throw new InvalidOperationException(
+                $"Vosk model not found or not fully extracted. Expected folders like am, conf, and graph under:{Environment.NewLine}{modelPath}{Environment.NewLine}{Environment.NewLine}If your unzip created a nested folder, that is okay too; FocalAgent also checks:{Environment.NewLine}{nestedModelPath}");
+        }
+
+        private static bool IsVoskModelDirectory(string path)
+        {
+            return Directory.Exists(Path.Combine(path, "am"))
+                && Directory.Exists(Path.Combine(path, "conf"))
+                && Directory.Exists(Path.Combine(path, "graph"));
+        }
+
+        private void DisposeMicrophone()
+        {
+            if (microphone is null)
+            {
+                return;
+            }
+
+            microphone.DataAvailable -= Microphone_DataAvailable;
+            microphone.RecordingStopped -= Microphone_RecordingStopped;
+            microphone.Dispose();
+            microphone = null;
+        }
+
+        private void DisposeRecognizer()
+        {
+            lock (speechLock)
+            {
+                speechRecognizer?.Dispose();
+                speechRecognizer = null;
+            }
+        }
+
+        protected override void OnFormClosed(FormClosedEventArgs e)
+        {
+            StopListening();
+            speechModel?.Dispose();
+            speechModel = null;
+            base.OnFormClosed(e);
         }
 
         private static async Task<string> GenerateWithOllamaAsync(string prompt)

@@ -54,6 +54,7 @@
             responseText = new TextBox();
             composerPanel = new TableLayoutPanel();
             promptTextBox = new TextBox();
+            voiceButton = new Button();
             sendButton = new Button();
             contextMenuStrip1.SuspendLayout();
             tableLayoutPanel1.SuspendLayout();
@@ -337,11 +338,13 @@
             // 
             // composerPanel
             // 
-            composerPanel.ColumnCount = 2;
+            composerPanel.ColumnCount = 3;
             composerPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
             composerPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 112F));
+            composerPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 112F));
             composerPanel.Controls.Add(promptTextBox, 0, 0);
-            composerPanel.Controls.Add(sendButton, 1, 0);
+            composerPanel.Controls.Add(voiceButton, 1, 0);
+            composerPanel.Controls.Add(sendButton, 2, 0);
             composerPanel.Dock = DockStyle.Fill;
             composerPanel.Location = new Point(16, 536);
             composerPanel.Margin = new Padding(0, 16, 0, 0);
@@ -360,8 +363,21 @@
             promptTextBox.Multiline = true;
             promptTextBox.Name = "promptTextBox";
             promptTextBox.PlaceholderText = "Type a prompt...";
-            promptTextBox.Size = new Size(824, 68);
+            promptTextBox.Size = new Size(712, 68);
             promptTextBox.TabIndex = 0;
+            // 
+            // voiceButton
+            // 
+            voiceButton.Dock = DockStyle.Fill;
+            voiceButton.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
+            voiceButton.Location = new Point(724, 0);
+            voiceButton.Margin = new Padding(0, 0, 12, 0);
+            voiceButton.Name = "voiceButton";
+            voiceButton.Size = new Size(100, 68);
+            voiceButton.TabIndex = 1;
+            voiceButton.Text = "Voice";
+            voiceButton.UseVisualStyleBackColor = true;
+            voiceButton.Click += VoiceButton_Click;
             // 
             // sendButton
             // 
@@ -371,7 +387,7 @@
             sendButton.Margin = new Padding(0);
             sendButton.Name = "sendButton";
             sendButton.Size = new Size(112, 68);
-            sendButton.TabIndex = 1;
+            sendButton.TabIndex = 2;
             sendButton.Text = "Send";
             sendButton.UseVisualStyleBackColor = true;
             sendButton.Click += SendButton_Click;
@@ -429,6 +445,7 @@
         private TextBox responseText;
         private TableLayoutPanel composerPanel;
         private TextBox promptTextBox;
+        private Button voiceButton;
         private Button sendButton;
     }
 }
