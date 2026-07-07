@@ -8,7 +8,7 @@ using Vosk;
 
 namespace FocalAgent
 {
-    public partial class Form1 : Form
+    public partial class frmFocalAgent : Form
     {
         private const string LocalModelLabel = "Local model";
         private const string OllamaModel = "llama3";
@@ -32,7 +32,7 @@ namespace FocalAgent
         private WaveInEvent? microphone;
         private bool isListening;
 
-        public Form1()
+        public frmFocalAgent()
         {
             InitializeComponent();
             modelSelector.SelectedIndex = 0;

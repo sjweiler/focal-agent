@@ -1,6 +1,6 @@
 ﻿namespace FocalAgent
 {
-    partial class Form1
+    partial class FocalAgentWindow
     {
         /// <summary>
         ///  Required designer variable.

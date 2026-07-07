@@ -1,3 +1,11 @@
+[![CI](https://github.com/sjweiler/focal-agent/actions/workflows/ci.yml/badge.svg)](...)
+[![CodeQL](https://github.com/sjweiler/focal-agent/actions/workflows/codeql.yml/badge.svg)](...)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![.NET](https://img.shields.io/badge/.NET-10-purple)
+![Windows](https://img.shields.io/badge/Windows-10%2F11-blue)
+![Status](https://img.shields.io/badge/status-alpha-red)
+
+
 Focal-Agent aims to be a practical AI desktop assistant capable of:
 
 - Running completely offline using local LLMs
